@@ -13,25 +13,6 @@ python -m venv .venv
 ./.venv/bin/pip install "epi-eeg @ git+https://github.com/unkwerror/epi.git"
 ```
 
-Для работы с демонстрационным ноутбуком нужен дополнительный набор:
-
-```bash
-./.venv/bin/pip install "epi-eeg[notebook] @ git+https://github.com/unkwerror/epi.git"
-```
-
-Если репозиторий закрытый, установка идёт по SSH:
-
-```bash
-./.venv/bin/pip install "epi-eeg[notebook] @ git+ssh://git@github.com/unkwerror/epi.git"
-```
-
-Для разработки — из локальной копии, в редактируемом режиме:
-
-```bash
-python -m venv .venv
-./.venv/bin/pip install -e ".[notebook]"
-```
-
 
 ## Данные пациентов
 
