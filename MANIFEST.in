@@ -1,0 +1,21 @@
+# В дистрибутив попадают только код и документация.
+#
+# Правила prune/exclude продублированы с .gitignore намеренно: sdist собирается
+# из рабочей папки и .gitignore не читает, поэтому без этого файла записи
+# пациентов уехали бы в архив.
+
+include LICENSE
+include README.md
+include requirements.txt
+
+prune тест
+prune "вторые девять"
+prune training
+prune plots
+prune explore
+prune .venv
+prune .jupyter-tmp
+
+global-exclude *.e *.rar *.npa *.npz *.sqlite *.ipynb
+global-exclude __pycache__ *.py[cod]
+exclude digest.json

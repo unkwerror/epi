@@ -1,0 +1,24 @@
+# ДАННЫЕ ПАЦИЕНТОВ -- никогда не коммитить.
+# Записи ЭЭГ и всё производное от них содержат сведения о здоровье детей:
+# GUID и даты рождения пациентов, фамилии, заметки врачей.
+*.e
+*.rar
+*.npa
+тест/
+вторые девять/
+catalog.sqlite
+catalog.sqlite-journal
+digest.json
+training/
+plots/
+*.npz
+
+# Служебное
+.venv/
+.jupyter-tmp/
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+.ipynb_checkpoints/

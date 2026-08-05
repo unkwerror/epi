@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "epi-eeg"
+description = "Каталог и обучающая выборка из записей ЭЭГ Nicolet/Nervus (.e)"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dynamic = ["version"]
+authors = [{ name = "unkwerror", email = "i.grishanow@gmail.com" }]
+keywords = ["ЭЭГ", "EEG", "epilepsy", "nicolet", "nervus", "seizure"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Private :: Do Not Upload",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "pynicolet>=0.1.2",
+    # Читалка Nicolet есть только в форке Swiss Epilepsy Center: в обычном neo
+    # с PyPI класса NicoletRawIO нет. Коммит закреплён намеренно -- от разбора
+    # маркеров этим классом зависят времена событий.
+    "neo @ git+https://github.com/Swiss-Epilepsy-Center/python-neo@abaf211b86be8c2f8b230aa067f1fa8703e10016",
+]
+
+[project.urls]
+Repository = "https://github.com/unkwerror/epi"
+
+[project.optional-dependencies]
+# для demo.ipynb
+notebook = ["pandas>=2.0", "ipykernel>=6", "jupyterlab>=4"]
+
+[project.scripts]
+epi = "epi.cli:main"
+
+[tool.setuptools]
+# explore/ -- разведочные скрипты, они часть репозитория, а не библиотеки
+packages = ["epi"]
+
+[tool.setuptools.dynamic]
+version = { attr = "epi.__version__" }
