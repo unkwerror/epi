@@ -184,9 +184,9 @@ def render(report):
 
     print("\nтипы маркеров:")
     for kind, count in list(report["markers"].items())[:10]:
-        print("    %-20s %5d" % (kind, count))
+        print("    %-38s %5d" % (kind, count))
 
-    print("\nсамые крупные классы маркеров без названия от производителя:")
+    print("\nсамые крупные классы маркеров, оставшихся без названия:")
     for row in report["unnamed_marker_classes"]:
         print("    %-40s %4d  от %-18s в среднем %.1f с"
               % (row["guid"], row["count"], (row["authors"] or "")[:18],

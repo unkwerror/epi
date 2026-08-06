@@ -23,8 +23,15 @@ UNKNOWN и портит кириллицу; pynicolet называет боль�
 Boundary -- это проверено на всех записях: начала приступов сходятся в тех же
 позициях, а в односегментных файлах, где обеим шкалам времени можно верить,
 расхождение не превышает 3 мс.
+
+Названия типов маркеров обе библиотеки ищут по готовым таблицам GUID, а типы,
+заведённые в самой клинике, туда не попадают. Их названия лежат в записи рядом
+с маркерами, и _names_from_file() читает их прямо из файла.
 """
 
+import mmap
+import re
+import uuid
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +48,17 @@ class ChannelNotFound(KeyError):
 # значения, которые означают "тип события не определён"
 UNRESOLVED = ("UNKNOWN", "")
 
+# Стандартные типы событий производителя. pynicolet знает всего девять и всё
+# остальное отдаёт как UNKNOWN; у neo тот же список набран заметно полнее.
+VENDOR_NAMES = dict(NicoletRawIO.HC_EVENT)
+
+# GUID из одних нулей: у обычного маркера на этом месте пусто, а у записи,
+# описывающей тип события, стоит настоящий второй GUID
+_ZERO_GUID = bytes(16)
+
+# длина названия типа в символах, всё длинное -- уже не название
+_NAME_LIMIT = 64
+
 
 def _repair_text(text):
     """Обратить чтение строки UTF-16LE по одному байту на символ.
@@ -55,6 +73,30 @@ def _repair_text(text):
         return text.encode("latin-1").decode("utf-16-le").rstrip("\x00").strip(), True
     except (UnicodeEncodeError, UnicodeDecodeError):
         return text, True
+
+
+def _utf16_name(raw, start):
+    """Прочитать строку UTF-16LE с нулевым окончанием, начиная с start.
+
+    Возвращает None, если по этому адресу лежит не название: строка обязана
+    закончиться на чётной границе, быть непустой, короткой и печатаемой.
+    """
+    end = start
+    limit = start + 2 * _NAME_LIMIT
+    while True:
+        end = raw.find(b"\x00\x00", end)
+        if end < 0 or end > limit:
+            return None
+        if (end - start) % 2 == 0:
+            break
+        end += 1
+    try:
+        name = raw[start:end].decode("utf-16-le").strip()
+    except UnicodeDecodeError:
+        return None
+    if len(name) < 2 or not all(c.isprintable() for c in name):
+        return None
+    return name
 
 
 def _to_datetime(date_parts, time_parts):
@@ -94,7 +136,7 @@ class Segment:
         )
 
 
-def learn_type_names(paths, rounds=4):
+def learn_type_names(paths, rounds=4, extra=None):
     """Построить словарь GUID -> название типа события по всей коллекции.
 
     Обучение по одному файлу слишком робкое: GUID остаётся безымянным в одной
@@ -104,9 +146,21 @@ def learn_type_names(paths, rounds=4):
     чтобы имена, найденные в одном файле, помогали разобрать плотные группы
     маркеров в следующем.
 
+    Названия, прочитанные прямо из файлов, голосованию не подлежат и
+    перекрывают его итог: они записаны самой системой, а не выведены из
+    совпадения времён.
+
+    extra -- словарь GUID -> название, который перекрывает всё остальное.
+    Часть типов заведена в самой NicoletOne и в выгрузку не попадает, так что
+    их названия можно только подсмотреть в списке событий штатной программы и
+    записать сюда руками.
+
     Возвращает словарь, который стоит передать во все ридеры через type_names.
     """
     readers = [NicoletEReader(path, type_names={}) for path in paths]
+    from_files = {}
+    for reader in readers:
+        from_files.update(reader._names_from_file())
     known = {}
     for _ in range(rounds):
         votes = defaultdict(Counter)
@@ -117,6 +171,8 @@ def learn_type_names(paths, rounds=4):
         if found == known:
             break
         known = found
+    known.update(from_files)
+    known.update(extra or {})
     return known
 
 
@@ -352,6 +408,42 @@ class NicoletEReader:
                 deduced.setdefault(remaining_guids[0], remaining_names[0])
         return {g: n for g, n in deduced.items() if n not in UNRESOLVED}
 
+    def _names_from_file(self):
+        """Названия типов событий, записанные в самой записи.
+
+        Клиника заводит в NicoletOne собственные типы маркеров, и готовые
+        таблицы производителя о них ничего не знают: их названия существуют
+        только внутри файла. Рядом с маркерами лежат описания типов, где за
+        GUID типа идёт второй, ненулевой GUID, а следом название строкой
+        UTF-16 -- обычный маркер отличается тем, что второй GUID у него
+        нулевой. Ищем только те GUID, которые действительно встретились как
+        типы событий, иначе на такую примету попадается половина файла.
+        """
+        by_bytes = {}
+        for event in self._header["raw_events"]:
+            try:
+                by_bytes[uuid.UUID(event["GUID"]).bytes_le] = event["GUID"]
+            except (ValueError, AttributeError, TypeError):
+                continue
+        if not by_bytes:
+            return {}
+
+        pattern = re.compile(b"|".join(re.escape(key) for key in by_bytes))
+        found = {}
+        with open(self.path, "rb") as handle:
+            raw = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
+            try:
+                for match in pattern.finditer(raw):
+                    start = match.end() + 16
+                    if raw[match.end():start] == _ZERO_GUID:
+                        continue
+                    name = _utf16_name(raw, start)
+                    if name is not None:
+                        found.setdefault(by_bytes[match.group()], name)
+            finally:
+                raw.close()
+        return found
+
     def _offset_of(self, event):
         """Секунды от начала записи до сырого маркера."""
         origin = self.segments[0].start_time
@@ -368,21 +460,28 @@ class NicoletEReader:
 
     def _merge_events(self):
         """Позиции берём из сырых абсолютных времён, названия -- из обеих библиотек."""
-        by_guid = (
-            self._type_names if self._type_names is not None else self._names_by_guid()
-        )
+        if self._type_names is not None:
+            by_guid = self._type_names
+        else:
+            by_guid = dict(self._names_by_guid())
+            by_guid.update(self._names_from_file())
         merged = []
         for event in self._header["raw_events"]:
             offset = self._offset_of(event)
             segment, local = self._locate(offset)
             from_pynicolet = event["IDStr"]
             from_neo = by_guid.get(event["GUID"], "")
-            if from_pynicolet not in UNRESOLVED:
-                kind = from_pynicolet
-            elif from_neo not in UNRESOLVED:
-                kind = from_neo
-            else:
-                kind = "UNKNOWN"
+            # готовые таблицы идут первыми: они дают привычные английские
+            # названия и не зависят от того, что нашлось в конкретном файле
+            kind = "UNKNOWN"
+            for candidate in (
+                from_pynicolet,
+                VENDOR_NAMES.get(event["GUID"], ""),
+                from_neo,
+            ):
+                if candidate not in UNRESOLVED:
+                    kind = candidate
+                    break
             merged.append(
                 {
                     "type": kind,

@@ -317,7 +317,7 @@ class WindowSet:
             print("%s: %d окон (%d с приступом), отброшено плоских %d"
                   % (fold, len(y), int(y.sum()),
                      dropped_positive + dropped_negative))
-            print("   форма %s при %g Гц" % ((x.shape,), self.rate))
+            print("   форма %s при %g Гц" % (x.shape, self.rate))
         return x, y
 
     def export(self, fold="train", out_dir="training", **kwargs):

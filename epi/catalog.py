@@ -228,12 +228,15 @@ class Catalog:
         )
         return recording_id
 
-    def sync(self, root=None, verbose=True):
+    def sync(self, root=None, verbose=True, extra_names=None):
         """Обойти папку и привести каталог в соответствие с диском.
 
         Файл разбирается заново, только если изменились его размер или время
         правки, а отпечаток содержимого при этом тоже разошёлся. Записи,
         пропавшие с диска, помечаются удалёнными.
+
+        extra_names -- словарь GUID -> название типа события, который
+        перекрывает всё найденное автоматически (см. learn_type_names).
 
         Возвращает словарь со счётчиками: added, updated, unchanged, revived,
         deleted.
@@ -248,7 +251,7 @@ class Catalog:
         counts = {"added": 0, "updated": 0, "unchanged": 0, "revived": 0, "deleted": 0}
 
         files = sorted(root.rglob("*.e"))
-        type_names = learn_type_names(files)
+        type_names = learn_type_names(files, extra=extra_names)
         self.conn.executemany(
             """INSERT INTO event_types VALUES (?, ?, ?)
                ON CONFLICT(guid) DO UPDATE SET name = excluded.name,
