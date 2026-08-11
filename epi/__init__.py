@@ -33,7 +33,7 @@ from .reader import ChannelNotFound, NicoletEReader, Segment, learn_type_names
 from .stats import render, summary
 from .windows import CANONICAL, TARGET_RATE, WindowSet
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 __all__ = [
     "Catalog",

@@ -134,10 +134,10 @@ def summary(catalog):
     if conn.execute("SELECT name FROM sqlite_master WHERE name='windows'").fetchone():
         report["windows"] = [
             {"fold": row["fold"], "patients": row["k"], "windows": row["w"],
-             "positive": row["p"] or 0}
+             "positive": row["p"] or 0, "excluded": row["g"] or 0}
             for row in conn.execute(
-                """SELECT fold, COUNT(*) w, SUM(label) p,
-                          COUNT(DISTINCT patient_key) k
+                """SELECT fold, SUM(label >= 0) w, SUM(label = 1) p,
+                          SUM(label < 0) g, COUNT(DISTINCT patient_key) k
                    FROM windows
                    JOIN recordings ON recordings.id = windows.recording_id
                    JOIN splits USING (patient_key)
@@ -195,5 +195,7 @@ def render(report):
     if report.get("windows"):
         print("\nобучающие окна:")
         for row in report["windows"]:
-            print("    %-6s %2d пациентов, %6d окон, %5d с приступом"
-                  % (row["fold"], row["patients"], row["windows"], row["positive"]))
+            print("    %-6s %2d пациентов, %6d окон, %5d положительных%s"
+                  % (row["fold"], row["patients"], row["windows"], row["positive"],
+                     ", %d в зазоре у приступа" % row["excluded"]
+                     if row["excluded"] else ""))

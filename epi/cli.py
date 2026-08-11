@@ -4,6 +4,7 @@
     python -m epi stats                 # выжимка статистики
     python -m epi patient <ключ>        # всё об одном пациенте
     python -m epi index                 # разметить окна
+    python -m epi index --gap-before 60 --gap-after 300   # с зазором у приступа
     python -m epi split                 # раздать пациентов по фолдам
     python -m epi export --fold train   # сохранить выборку в .npz
     python -m epi plot --type Seizure   # нарисовать маркеры в файлы .png
@@ -22,7 +23,10 @@ from .windows import WindowSet
 
 def _window_set(catalog, args):
     return WindowSet(catalog, length_sec=args.length, stride_sec=args.stride,
-                     min_overlap_sec=args.min_overlap, rate=args.rate)
+                     min_overlap_sec=args.min_overlap,
+                     gap_before_sec=args.gap_before, gap_after_sec=args.gap_after,
+                     preictal_sec=args.preictal, merge_gap_sec=args.merge_gap,
+                     positives_per_event=args.positives_per_event, rate=args.rate)
 
 
 def build_parser():
@@ -47,6 +51,17 @@ def build_parser():
         p.add_argument("--length", type=float, default=10.0)
         p.add_argument("--stride", type=float, default=5.0)
         p.add_argument("--min-overlap", type=float, default=5.0)
+        p.add_argument("--gap-before", type=float, default=0.0,
+                       help="зазор перед приступом, с: окна ближе не берутся")
+        p.add_argument("--gap-after", type=float, default=0.0,
+                       help="зазор после приступа, с (постиктальный хвост)")
+        p.add_argument("--preictal", type=float, default=None,
+                       help="длина окна ожидания приступа, с: включает "
+                            "разметку под задачу прогноза")
+        p.add_argument("--merge-gap", type=float, default=0.0,
+                       help="приступы ближе стольких секунд считать одним событием")
+        p.add_argument("--positives-per-event", type=int, default=None,
+                       help="сколько положительных окон брать с одного события")
         p.add_argument("--rate", type=float, default=256.0)
         if name == "split":
             p.add_argument("--seed", type=int, default=0)
@@ -55,6 +70,10 @@ def build_parser():
             p.add_argument("--fold", default="train")
             p.add_argument("--n", type=int, default=1000)
             p.add_argument("--positive-ratio", type=float, default=0.5)
+            p.add_argument("--hard-ratio", type=float, default=0.0,
+                           help="доля фоновых окон, взятых вплотную к приступу")
+            p.add_argument("--hard-span", type=float, default=600.0,
+                           help="ширина полосы трудных окон, с (от края зазора)")
             p.add_argument("--max-flat", type=float, default=0.01)
             p.add_argument("--seed", type=int, default=0)
             p.add_argument("--out", default="training")
@@ -108,8 +127,8 @@ def main(argv=None):
     elif args.command == "export":
         _window_set(catalog, args).export(
             fold=args.fold, out_dir=args.out, n=args.n,
-            positive_ratio=args.positive_ratio, max_flat=args.max_flat,
-            seed=args.seed)
+            positive_ratio=args.positive_ratio, hard_ratio=args.hard_ratio,
+            hard_span_sec=args.hard_span, max_flat=args.max_flat, seed=args.seed)
 
     elif args.command == "plot":
         if not args.kind and not args.guid:
