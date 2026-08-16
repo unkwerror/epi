@@ -25,6 +25,7 @@ dependencies = [
     "scipy>=1.10",
     "matplotlib>=3.7",
     "pynicolet>=0.1.2",
+    "scikit-learn>=1.3",
     # Читалка Nicolet есть только в форке Swiss Epilepsy Center: в обычном neo
     # с PyPI класса NicoletRawIO нет. Коммит закреплён намеренно -- от разбора
     # маркеров этим классом зависят времена событий.
