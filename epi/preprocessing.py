@@ -2,6 +2,10 @@ import numpy as np
 from scipy.signal import butter, filtfilt, iirnotch, sosfiltfilt
 
 
+FATAL = ("flat_signal", "nan")
+WARNING = ("high_amplitude", "large_jump", "clipping", "bad_channels")
+
+
 def _array(x):
     x = np.asarray(x)
     if x.ndim not in (2, 3):
@@ -75,27 +79,100 @@ def quality(x, flat_eps=1e-6, bad_low=0.1, bad_high=10.0):
     return result
 
 
-def clean_mask(x, max_flat=0.01, max_amplitude_uv=1000.0, max_jump_uv=250.0,
-               max_clipping=0.01, max_bad_channels=0.25, max_nan=0.0):
+def _quality_flags(q, max_flat, max_amplitude_uv, max_jump_uv, max_clipping,
+                   max_bad_channels, max_nan):
+    return {
+        "flat_signal": q["flat_fraction"] > max_flat,
+        "high_amplitude": q["amplitude_uv"] > max_amplitude_uv,
+        "large_jump": q["jump_uv"] > max_jump_uv,
+        "clipping": q["clipping_fraction"] > max_clipping,
+        "bad_channels": q["bad_channel_fraction"] > max_bad_channels,
+        "nan": q["nan_fraction"] > max_nan,
+    }
+
+
+def quality_flags(x, max_flat=0.01, max_amplitude_uv=1000.0, max_jump_uv=250.0,
+                  max_clipping=0.01, max_bad_channels=0.25, max_nan=0.0):
     q = quality(x)
-    single = np.asarray(x).ndim == 2
-    if single:
-        return bool(
-            q["flat_fraction"] <= max_flat
-            and q["amplitude_uv"] <= max_amplitude_uv
-            and q["jump_uv"] <= max_jump_uv
-            and q["clipping_fraction"] <= max_clipping
-            and q["bad_channel_fraction"] <= max_bad_channels
-            and q["nan_fraction"] <= max_nan
-        )
-    return (
-        (q["flat_fraction"] <= max_flat)
-        & (q["amplitude_uv"] <= max_amplitude_uv)
-        & (q["jump_uv"] <= max_jump_uv)
-        & (q["clipping_fraction"] <= max_clipping)
-        & (q["bad_channel_fraction"] <= max_bad_channels)
-        & (q["nan_fraction"] <= max_nan)
+    return _quality_flags(
+        q, max_flat, max_amplitude_uv, max_jump_uv, max_clipping,
+        max_bad_channels, max_nan
     )
+
+
+def quality_report(x, max_flat=0.01, max_amplitude_uv=1000.0, max_jump_uv=250.0,
+                   max_clipping=0.01, max_bad_channels=0.25, max_nan=0.0):
+    single = np.asarray(x).ndim == 2
+    q = quality(x)
+    flags = _quality_flags(
+        q, max_flat, max_amplitude_uv, max_jump_uv, max_clipping,
+        max_bad_channels, max_nan
+    )
+
+    if single:
+        fatal = any(bool(flags[name]) for name in FATAL)
+        warning = any(bool(flags[name]) for name in WARNING)
+        reasons = [name for name, bad in flags.items() if bad]
+        return {
+            **q,
+            "fatal": fatal,
+            "warning": warning,
+            "keep": not fatal,
+            "reasons": reasons,
+        }
+
+    n = len(next(iter(flags.values())))
+    fatal = np.zeros(n, dtype=bool)
+    warning = np.zeros(n, dtype=bool)
+
+    for name in FATAL:
+        fatal |= flags[name]
+    for name in WARNING:
+        warning |= flags[name]
+
+    reasons = np.array([
+        ";".join(name for name, bad in flags.items() if bad[i]) or "ok"
+        for i in range(n)
+    ], dtype=object)
+
+    return {
+        **q,
+        "fatal": fatal,
+        "warning": warning,
+        "keep": ~fatal,
+        "reasons": reasons,
+    }
+
+
+def clean_mask(x, max_flat=0.01, max_amplitude_uv=1000.0, max_jump_uv=250.0,
+               max_clipping=0.01, max_bad_channels=0.25, max_nan=0.0,
+               strict=False):
+    flags = quality_flags(
+        x,
+        max_flat=max_flat,
+        max_amplitude_uv=max_amplitude_uv,
+        max_jump_uv=max_jump_uv,
+        max_clipping=max_clipping,
+        max_bad_channels=max_bad_channels,
+        max_nan=max_nan,
+    )
+    single = np.asarray(x).ndim == 2
+
+    if single:
+        fatal = any(bool(flags[name]) for name in FATAL)
+        warning = any(bool(flags[name]) for name in WARNING)
+        return not (fatal or (strict and warning))
+
+    n = len(next(iter(flags.values())))
+    fatal = np.zeros(n, dtype=bool)
+    warning = np.zeros(n, dtype=bool)
+
+    for name in FATAL:
+        fatal |= flags[name]
+    for name in WARNING:
+        warning |= flags[name]
+
+    return ~(fatal | warning) if strict else ~fatal
 
 
 def preprocess(x, rate, low=0.5, high=40.0, notch_freq=50.0, normalize_signal=False):

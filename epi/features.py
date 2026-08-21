@@ -49,13 +49,13 @@ def spectral(x, rate, bands=BANDS, nperseg=None):
     freq, power = welch(x, fs=rate, nperseg=nperseg, axis=-1)
     power = power.mean(axis=1)
     total_mask = (freq >= bands[0][1]) & (freq <= bands[-1][2])
-    total = np.trapz(power[:, total_mask], freq[total_mask], axis=-1) + 1e-12
+    total = np.trapezoid(power[:, total_mask], freq[total_mask], axis=-1) + 1e-12
 
     values = []
     names = []
     for name, low, high in bands:
         mask = (freq >= low) & (freq < high)
-        band = np.trapz(power[:, mask], freq[mask], axis=-1)
+        band = np.trapezoid(power[:, mask], freq[mask], axis=-1)
         values.append(band / total)
         names.append("power_%s" % name)
 

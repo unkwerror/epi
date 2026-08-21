@@ -541,28 +541,44 @@ class WindowSet:
             return [rows[i] for i in generator.permutation(len(rows))]
 
         def fill(label, quota, hard=None):
-            chosen, skipped = [], 0
+            chosen, flat, unreadable = [], 0, 0
+        
             for window in candidates(label, hard):
                 if len(chosen) >= quota:
                     break
-                data = self.load(window)
-                if self.flat_fraction(data) > max_flat:
-                    skipped += 1
+        
+                try:
+                    data = self.load(window)
+                except IndexError:
+                    unreadable += 1
                     continue
+        
+                if self.flat_fraction(data) > max_flat:
+                    flat += 1
+                    continue
+        
                 chosen.append(data)
-            return chosen, skipped
+        
+            return chosen, flat, unreadable
 
         wanted_positive = int(round(n * positive_ratio))
         wanted_negative = n - wanted_positive
         wanted_hard = int(round(wanted_negative * hard_ratio))
 
-        positives, dropped = fill(1, wanted_positive)
+        positives, dropped, unreadable = fill(1, wanted_positive)
+        
         if wanted_hard:
-            hard, dropped_hard = fill(0, wanted_hard, hard=True)
-            easy, dropped_easy = fill(0, wanted_negative - len(hard), hard=False)
+            hard, dropped_hard, unreadable_hard = fill(
+                0, wanted_hard, hard=True
+            )
+            easy, dropped_easy, unreadable_easy = fill(
+                0, wanted_negative - len(hard), hard=False
+            )
         else:
-            hard, dropped_hard = [], 0
-            easy, dropped_easy = fill(0, wanted_negative)
+            hard, dropped_hard, unreadable_hard = [], 0, 0
+            easy, dropped_easy, unreadable_easy = fill(
+                0, wanted_negative
+            )
         negatives = hard + easy
 
         kept = positives + negatives
@@ -575,9 +591,10 @@ class WindowSet:
         y = np.array([labels[i] for i in order])
 
         if verbose:
-            print("%s: %d окон (%d %s), отброшено плоских %d"
+            print("%s: %d окон (%d %s), отброшено плоских %d ошибок чтения %d"
                   % (fold, len(y), int(y.sum()), self.positive_name,
-                     dropped + dropped_hard + dropped_easy))
+                     dropped + dropped_hard + dropped_easy, 
+                     unreadable + unreadable_hard + unreadable_easy))
             if wanted_hard:
                 print("   из фона трудных %d из %d: не дальше %.0f с до и %.0f с "
                       "после приступа" % (len(hard), len(negatives), band[0], band[1]))
